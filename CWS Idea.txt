@@ -1,0 +1,24 @@
+
+Idea
+	Command Waiter Software (desde ahora CWS) es un programa que se ejecuta
+	en segundo plano en espera de comandos.
+	
+	Metas
+		Que el servidor al que sirve sea injectable
+			vamos a robar codigo desde Worcome xD
+		
+		Hacer que el programa se ejecute en segundo plano
+		Al iniciar por primera vez
+			Reportarse a un servidor
+			Guardar los datos del servidor a servir
+			Guardar el estado de que ya se a iniciado
+				(evita volver a reportase, etc)
+		
+		Al iniciarse por segunda vez (y en adelante)
+			Obtener los datos del servidor a "servir"
+			Obtener su informe de accion
+		
+		Al recibir un comando
+			hacer lo indicado
+
+CWS NO ES DAÑINO. Es una idea antigua que se me habia ocurrido.
