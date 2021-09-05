@@ -2,6 +2,7 @@
 
     Private Sub Main_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         Me.Hide()
+        CheckForIllegalCrossThreadCalls = False
         Init()
     End Sub
 
