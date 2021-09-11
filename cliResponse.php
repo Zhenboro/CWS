@@ -2,7 +2,7 @@
 $ident=$_POST["ident"];
 $log=$_POST["log"];
 if (isset($ident) && isset($log)) {
-	$reportName=$ident.".txt";
+	$reportName='Users/'.$ident.".txt";
 	// el formato de nombre es ej: xxXxXx.txt
 	if (file_exists($reportName)) {
 		// existe, entonces sobreescribir

