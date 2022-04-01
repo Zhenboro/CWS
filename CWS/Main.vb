@@ -17,6 +17,8 @@ Public Class Main
                 LoadConfig()
                 CheckForUpdates()
                 Exit Sub
+            Else
+                ReadServerCommands(Parametros)
             End If
             Init()
         Catch ex As Exception

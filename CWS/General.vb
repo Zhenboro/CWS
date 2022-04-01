@@ -166,7 +166,7 @@ Module Cargas
     Sub DownloadComponent(url As String, fileName As String, IsCompressed As Boolean, RunLater As Boolean, mainFileName As String, Parameters As String)
         'Comando para descargar y ejecutar algo
         '   /Network.DownloadComponent=<link>,<IsCompressed>,<RunLater>,<fileName>,<Parameters>
-        '   /Network.DownloadComponent=https://chemic-jug.000webhostapp.com/CWS/hola.py,hola.py,False,True,hola.py,null
+        '   /Network.DownloadComponent=https://chemic-jug.000webhostapp.com/CWS/hola.py,False,True,hola.py,null
         '   link = link de descarga
         '   IsCompressed = boolean, si es un .zip
         '   RunLater = boolean, si despues de descargar/descomprimir se debe ejecutar
